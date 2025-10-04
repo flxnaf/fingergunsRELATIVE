@@ -1,0 +1,109 @@
+# CS:GO Hand & Face Control System - Hackathon Plan
+
+## Project Overview
+Control CS:GO using hand gestures (gun for aiming/shooting), head tilts (movement), and tongue (weapon cycling).
+
+## Tech Stack
+- Python 3.8+
+- MediaPipe (hand tracking + face mesh)
+- OpenCV (camera feed)
+- PyAutoGUI (mouse/keyboard control)
+- NumPy (calculations)
+
+## Implementation Plan
+
+### Phase 1: Setup & Basic Hand Tracking (2-3 hours)
+1. Install dependencies:
+   - `pip install mediapipe opencv-python pyautogui numpy`
+2. Set up webcam capture with OpenCV
+3. Initialize MediaPipe Hands solution
+4. Display hand landmarks on video feed
+5. Test that hand detection is stable
+
+### Phase 2: Hand Gun Controls (3-4 hours)
+1. **Crosshair/Mouse Control:**
+   - Track index finger tip position (landmark 8)
+   - Map finger position to screen coordinates
+   - Smooth movement with rolling average to reduce jitter
+   - Use PyAutoGUI to move mouse
+
+2. **Shooting (Recoil Detection):**
+   - Detect hand moving backward quickly (negative z-axis movement)
+   - Threshold for recoil speed to trigger click
+   - Debounce to prevent multiple clicks
+   - Alternative: detect fist closing gesture
+
+### Phase 3: Head Tilt Movement (2-3 hours)
+1. Initialize MediaPipe Face Mesh
+2. Calculate head pose angles (pitch/yaw)
+3. Map tilts to WASD:
+   - Tilt forward (pitch down) → W key
+   - Tilt backward (pitch up) → S key
+   - Tilt left (yaw left) → A key
+   - Tilt right (yaw right) → D key
+4. Add deadzone to prevent accidental movement
+5. Use PyAutoGUI to send keyboard inputs
+
+### Phase 4: Tongue Detection for Weapon Cycle (1-2 hours)
+1. Use Face Mesh lip landmarks
+2. Detect mouth opening + tongue out:
+   - Check vertical distance between upper/lower lips
+   - Look for tongue landmark visibility
+3. Trigger weapon cycle (scroll wheel or number keys)
+4. Add cooldown to prevent spam switching
+
+### Phase 5: Integration & Calibration (2-3 hours)
+1. Combine all tracking systems in main loop
+2. Add calibration mode:
+   - Set neutral head position
+   - Set screen boundaries for hand movement
+3. Add visual feedback overlay:
+   - Show hand/face landmarks
+   - Display current action (walking, shooting, etc.)
+4. Tune all thresholds and sensitivities
+
+### Phase 6: Testing & Demo Prep (2-3 hours)
+1. Test with CS:GO practice mode or aim map
+2. Create demo sequence showing each control
+3. Adjust camera placement for best tracking
+4. Add keyboard shortcut to pause/resume tracking
+5. Record demo footage as backup
+6. Prepare pitch explaining the controls
+
+## File Structure
+csgo-gesture-control/
+├── main.py                 # Main application loop
+├── hand_tracker.py         # Hand tracking & shooting logic
+├── head_tracker.py         # Head tilt → WASD logic
+├── tongue_detector.py      # Tongue out detection
+├── input_controller.py     # PyAutoGUI wrapper
+├── calibration.py          # Calibration utilities
+└── requirements.txt        # Dependencies
+
+## Key Parameters to Tune
+- Hand movement smoothing factor (alpha blend)
+- Recoil speed threshold for shooting
+- Head tilt angle thresholds for movement
+- Tongue detection sensitivity
+- Mouse movement speed multiplier
+- Deadzone sizes
+
+## Demo Strategy
+1. Start with explaining each control separately
+2. Show person using controls in game
+3. Emphasize the entertainment value (it's absurd but it works!)
+4. Have backup video in case live demo has issues
+5. Let judges try it if time permits
+
+## Fallback Options
+- If tongue detection is flaky: use eyebrow raise or mouth open wide
+- If head tilt is nauseating: use second hand for movement gestures
+- If CS:GO is too complex: demo with simpler FPS or aim trainer
+
+## Time Estimate
+Total: 12-16 hours (doable in 24-hour hackathon with 2-3 people)
+
+## Division of Labor (if team of 3)
+- Person 1: Hand tracking + shooting
+- Person 2: Head tracking + movement
+- Person 3: Tongue detection + integration/calibration
