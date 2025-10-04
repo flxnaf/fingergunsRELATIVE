@@ -1,0 +1,34 @@
+# CS:GO Hand & Face Control System - Enhanced with AI Modes
+# Core gesture tracking dependencies
+mediapipe>=0.10.0
+opencv-python>=4.8.0
+pyautogui>=0.9.54
+numpy>=1.24.0
+
+# AI Integration dependencies
+google-generativeai>=0.3.0
+requests>=2.31.0
+
+# Voice and Audio dependencies
+elevenlabs>=0.2.26
+speechrecognition>=3.10.0
+pyaudio>=0.2.11
+pygame>=2.5.0
+
+# Additional utilities
+pillow>=10.0.0
+threading
+queue
+collections
+time
+json
+configparser
+
+# Optional: For advanced features
+pydub>=0.25.1
+librosa>=0.10.0
+
+# Development dependencies (optional)
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0

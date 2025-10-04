@@ -1,7 +1,8 @@
-# CS:GO Hand & Face Control System - Hackathon Plan
+# CS:GO Hand & Face Control System - Enhanced with AI Modes
 
 ## Project Overview
 Control CS:GO using hand gestures (gun for aiming/shooting), head tilts (movement), and tongue (weapon cycling).
+**NEW**: Two AI-powered modes - Tutorial Mode and Backseat Gamer Mode with virtual character overlay.
 
 ## Tech Stack
 - Python 3.8+
@@ -9,16 +10,21 @@ Control CS:GO using hand gestures (gun for aiming/shooting), head tilts (movemen
 - OpenCV (camera feed)
 - PyAutoGUI (mouse/keyboard control)
 - NumPy (calculations)
+- **NEW**: Gemini API (AI commentary & coaching)
+- **NEW**: ElevenLabs API (voice synthesis)
+- **NEW**: Pygame (overlay graphics)
+- **NEW**: SpeechRecognition (voice commands)
 
 ## Implementation Plan
 
 ### Phase 1: Setup & Basic Hand Tracking (2-3 hours)
 1. Install dependencies:
-   - `pip install mediapipe opencv-python pyautogui numpy`
+   - `pip install mediapipe opencv-python pyautogui numpy google-generativeai requests pygame speechrecognition pyaudio`
 2. Set up webcam capture with OpenCV
 3. Initialize MediaPipe Hands solution
 4. Display hand landmarks on video feed
 5. Test that hand detection is stable
+6. **NEW**: Set up API keys for Gemini and ElevenLabs
 
 ### Phase 2: Hand Gun Controls (3-4 hours)
 1. **Crosshair/Mouse Control:**
@@ -62,23 +68,60 @@ Control CS:GO using hand gestures (gun for aiming/shooting), head tilts (movemen
    - Display current action (walking, shooting, etc.)
 4. Tune all thresholds and sensitivities
 
-### Phase 6: Testing & Demo Prep (2-3 hours)
+### Phase 6: AI Modes Implementation (4-5 hours)
+1. **Tutorial Mode:**
+   - Create step-by-step gesture training
+   - Gemini generates personalized tips
+   - ElevenLabs provides voice instructions
+   - Visual overlay showing correct gestures
+   - Progress tracking and skill assessment
+
+2. **Backseat Gamer Mode:**
+   - Virtual character overlay (cartoon/anime style)
+   - Gemini analyzes gameplay and gives live commentary
+   - ElevenLabs voices the backseat gamer character
+   - Character reacts to player performance
+   - Tactical advice and strategy suggestions
+
+### Phase 7: Integration & Calibration (2-3 hours)
+1. Combine all tracking systems in main loop
+2. Add mode switching (Tutorial/Backseat/Normal)
+3. Add calibration mode:
+   - Set neutral head position
+   - Set screen boundaries for hand movement
+4. Add visual feedback overlay:
+   - Show hand/face landmarks
+   - Display current action (walking, shooting, etc.)
+   - **NEW**: Show AI mode status and character
+5. Tune all thresholds and sensitivities
+
+### Phase 8: Testing & Demo Prep (2-3 hours)
 1. Test with CS:GO practice mode or aim map
-2. Create demo sequence showing each control
+2. Create demo sequence showing each control and AI mode
 3. Adjust camera placement for best tracking
-4. Add keyboard shortcut to pause/resume tracking
-5. Record demo footage as backup
-6. Prepare pitch explaining the controls
+4. Add keyboard shortcuts:
+   - 't' for Tutorial mode
+   - 'b' for Backseat Gamer mode
+   - 'n' for Normal mode
+   - 'c' to pause/resume tracking
+5. Record demo footage showcasing AI features
+6. Prepare pitch explaining the controls and AI integration
 
 ## File Structure
 csgo-gesture-control/
-├── main.py                 # Main application loop
+├── main.py                 # Main application loop with mode switching
 ├── hand_tracker.py         # Hand tracking & shooting logic
 ├── head_tracker.py         # Head tilt → WASD logic
 ├── tongue_detector.py      # Tongue out detection
 ├── input_controller.py     # PyAutoGUI wrapper
 ├── calibration.py          # Calibration utilities
-└── requirements.txt        # Dependencies
+├── **NEW**: tutorial_mode.py    # Tutorial mode implementation
+├── **NEW**: backseat_mode.py    # Backseat gamer mode with character
+├── **NEW**: ai_commentary.py    # Gemini + ElevenLabs integration
+├── **NEW**: character_overlay.py # Virtual character graphics
+├── **NEW**: voice_commands.py   # Voice command processing
+├── **NEW**: config.py           # API keys and settings
+└── requirements.txt        # Dependencies (updated)
 
 ## Key Parameters to Tune
 - Hand movement smoothing factor (alpha blend)
@@ -87,23 +130,50 @@ csgo-gesture-control/
 - Tongue detection sensitivity
 - Mouse movement speed multiplier
 - Deadzone sizes
+- **NEW**: AI commentary frequency and intensity
+- **NEW**: Character overlay animation timing
+- **NEW**: Voice command recognition sensitivity
+- **NEW**: Tutorial progression thresholds
 
 ## Demo Strategy
-1. Start with explaining each control separately
-2. Show person using controls in game
-3. Emphasize the entertainment value (it's absurd but it works!)
-4. Have backup video in case live demo has issues
-5. Let judges try it if time permits
+1. **Start with Tutorial Mode**: Show AI teaching gesture controls
+2. **Switch to Backseat Gamer Mode**: Demonstrate virtual character giving live commentary
+3. **Normal Mode**: Show person using controls in actual CS:GO gameplay
+4. **Highlight AI Features**: Emphasize the AI coaching and entertainment value
+5. **Interactive Demo**: Let judges try different modes if time permits
+6. **Backup Plan**: Have recorded footage showcasing all modes
 
 ## Fallback Options
 - If tongue detection is flaky: use eyebrow raise or mouth open wide
 - If head tilt is nauseating: use second hand for movement gestures
 - If CS:GO is too complex: demo with simpler FPS or aim trainer
+- **NEW**: If AI APIs fail: use pre-recorded responses or text-only mode
+- **NEW**: If character overlay is buggy: use simple text overlay instead
 
 ## Time Estimate
-Total: 12-16 hours (doable in 24-hour hackathon with 2-3 people)
+Total: 18-22 hours (doable in 24-hour hackathon with 3-4 people)
 
-## Division of Labor (if team of 3)
-- Person 1: Hand tracking + shooting
-- Person 2: Head tracking + movement
-- Person 3: Tongue detection + integration/calibration
+## Division of Labor (if team of 4)
+- Person 1: Hand tracking + shooting + gesture controls
+- Person 2: Head tracking + movement + tongue detection
+- Person 3: **NEW** AI integration (Gemini + ElevenLabs + voice commands)
+- Person 4: **NEW** Character overlay + tutorial mode + UI/UX
+
+## NEW: Detailed AI Modes Features
+
+### Tutorial Mode Features:
+- Step-by-step gesture training with visual guides
+- Gemini generates personalized tips based on performance
+- ElevenLabs provides encouraging voice instructions
+- Progress tracking with skill assessments
+- Adaptive difficulty based on learning speed
+- Achievement system for motivation
+
+### Backseat Gamer Mode Features:
+- Animated virtual character (cartoon/anime style)
+- Character reacts to player performance with expressions
+- Gemini provides contextual commentary and strategy
+- ElevenLabs voices the character with personality
+- Character gives tactical advice in real-time
+- Multiple character personalities to choose from
+- Character can celebrate good plays or give constructive criticism
