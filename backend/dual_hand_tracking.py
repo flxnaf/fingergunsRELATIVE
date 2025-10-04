@@ -61,9 +61,35 @@ def is_thumb_down(hand_landmarks):
     
     return thumb_below or thumb_close
 
+def are_bottom_fingers_curled(hand_landmarks):
+    """Check if bottom 3 fingers are curled (rotation-proof) - from finger_tracking.py"""
+    landmarks = hand_landmarks.landmark
+    wrist = landmarks[0]
+    
+    middle_tip = landmarks[12]
+    middle_mcp = landmarks[9]
+    middle_dist = ((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2)**0.5
+    middle_mcp_dist = ((middle_mcp.x - wrist.x)**2 + (middle_mcp.y - wrist.y)**2)**0.5
+    middle_curled = middle_dist < middle_mcp_dist * 1.8
+    
+    ring_tip = landmarks[16]
+    ring_mcp = landmarks[13]
+    ring_dist = ((ring_tip.x - wrist.x)**2 + (ring_tip.y - wrist.y)**2)**0.5
+    ring_mcp_dist = ((ring_mcp.x - wrist.x)**2 + (ring_mcp.y - wrist.y)**2)**0.5
+    ring_curled = ring_dist < ring_mcp_dist * 1.8
+    
+    pinky_tip = landmarks[20]
+    pinky_mcp = landmarks[17]
+    pinky_dist = ((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2)**0.5
+    pinky_mcp_dist = ((pinky_mcp.x - wrist.x)**2 + (pinky_mcp.y - wrist.y)**2)**0.5
+    pinky_curled = pinky_dist < pinky_mcp_dist * 1.8
+    
+    curled_count = sum([middle_curled, ring_curled, pinky_curled])
+    return curled_count >= 2
+
 def detect_left_hand_gestures(hand_landmarks):
     """
-    Detect different gestures for left hand controls
+    Detect left hand gestures for CS:GO controls - palm facing camera
     Returns: gesture_name, action_key
     """
     try:
@@ -72,31 +98,22 @@ def detect_left_hand_gestures(hand_landmarks):
             
         landmarks = hand_landmarks.landmark
         
-        # Check individual finger states safely
-        thumb_up = is_finger_extended(landmarks, 4, 3, 2)
-        index_up = is_finger_extended(landmarks, 8, 6, 5)
-        middle_up = is_finger_extended(landmarks, 12, 10, 9)
-        ring_up = is_finger_extended(landmarks, 16, 14, 13)
-        pinky_up = is_finger_extended(landmarks, 20, 18, 17)
+        # Check individual finger states - for palm-facing camera, we check if fingers are DOWN
+        thumb_down = not is_finger_extended(landmarks, 4, 3, 2)  # Inverted logic
+        index_down = not is_finger_extended(landmarks, 8, 6, 5)  # Inverted logic
+        middle_down = not is_finger_extended(landmarks, 12, 10, 9)  # Inverted logic
+        ring_down = not is_finger_extended(landmarks, 16, 14, 13)  # Inverted logic
+        pinky_down = not is_finger_extended(landmarks, 20, 18, 17)  # Inverted logic
         
-        # Gesture detection
-        fingers_up = [thumb_up, index_up, middle_up, ring_up, pinky_up]
-        num_fingers_up = sum(fingers_up)
+        # Gesture detection based on fingers DOWN
+        fingers_down = [thumb_down, index_down, middle_down, ring_down, pinky_down]
+        num_fingers_down = sum(fingers_down)
         
-        if num_fingers_up == 1 and index_up:
-            return "point", "1"  # Primary weapon
-        elif num_fingers_up == 1 and middle_up:
-            return "peace", "2"  # Secondary weapon
-        elif num_fingers_up == 1 and ring_up:
-            return "three", "3"  # Knife
-        elif num_fingers_up == 2 and index_up and middle_up:
-            return "victory", "4"  # Grenade
-        elif num_fingers_up == 3 and index_up and middle_up and ring_up:
-            return "three_fingers", "5"  # C4/Bomb
-        elif num_fingers_up == 0:  # Fist
-            return "fist", "r"  # Reload
-        elif num_fingers_up == 5:  # Open hand
-            return "open_hand", "q"  # Quick switch
+        
+        if num_fingers_down == 1:  # One finger down
+            return "one_down", "ctrl"  # Crouch
+        elif num_fingers_down == 4:  # Four fingers down (thumb up)
+            return "four_down", "space"  # Jump
         else:
             return "unknown", None
             
@@ -128,6 +145,7 @@ class StickyGunDetector:
         
         self.frames_without_hand = 0
         gun_detected = is_gun_gesture(hand_landmarks)
+        bottom_fingers_curled = are_bottom_fingers_curled(hand_landmarks)
         
         if not self.is_locked:
             if gun_detected:
@@ -138,7 +156,7 @@ class StickyGunDetector:
                 return False
         else:
             self.lock_frames += 1
-            if not gun_detected:
+            if not bottom_fingers_curled:
                 self.is_locked = False
                 self.lock_frames = 0
                 return False
@@ -201,7 +219,7 @@ class LeftHandGestureController:
     def __init__(self):
         self.last_gesture = None
         self.last_gesture_time = 0
-        self.gesture_debounce = 1.0  # 1 second between gestures
+        self.gesture_debounce = 0.1  # 0.1 second between gestures (much faster)
         
     def update(self, hand_landmarks, control_enabled):
         try:
@@ -243,8 +261,18 @@ class DualHandTrackingController:
             min_tracking_confidence=0.3
         )
         
-        # Initialize camera
+        # Initialize camera with higher resolution settings
         self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        
+        # Test camera
+        if not self.cap.isOpened():
+            print("Error: Could not open camera")
+            return
+        else:
+            print("Camera initialized successfully")
         
         # Initialize controllers
         self.right_gun_detector = StickyGunDetector(grace_period=30)
@@ -257,7 +285,7 @@ class DualHandTrackingController:
         
         print("Dual hand tracking controller initialized!")
         print("Right hand: Gun gesture + thumb shooting")
-        print("Left hand: Gesture controls (1-5, R, Q)")
+        print("Left hand: Palm-facing controls (crouch/jump)")
     
     def identify_hands(self, hand_landmarks_list):
         """
@@ -310,30 +338,38 @@ class DualHandTrackingController:
         print("DUAL HAND TRACKING: Enhanced CS:GO Controls")
         print("=" * 70)
         print("Controls:")
-        print("  'c' - Toggle control ON/OFF")
+        print("  't' - Toggle control ON/OFF")
         print("  'q' - Quit")
         print("\nRight Hand (Gun Control):")
         print("  - Gun gesture (index out, bottom 3 curled)")
         print("  - Thumb UP = ready to shoot")
         print("  - Thumb DOWN = START FIRING")
         print("  - Index finger controls cursor")
-        print("\nLeft Hand (Gesture Controls):")
-        print("  - Index finger up = Press '1' (Primary weapon)")
-        print("  - Middle finger up = Press '2' (Secondary weapon)")
-        print("  - Ring finger up = Press '3' (Knife)")
-        print("  - Index + Middle = Press '4' (Grenade)")
-        print("  - Index + Middle + Ring = Press '5' (C4)")
-        print("  - Fist = Press 'R' (Reload)")
-        print("  - Open hand = Press 'Q' (Quick switch)")
+        print("\nLeft Hand (Palm-Facing Controls):")
+        print("  - One finger down = Press 'CTRL' (Crouch)")
+        print("  - Four fingers down = Press 'SPACE' (Jump)")
+        print("  - Other positions = No action")
         print("\nPerfect for advanced CS:GO control!")
         print("=" * 70)
         
+        frame_count = 0
+        last_frame_time = time.time()
+        
         while self.cap.isOpened():
             try:
+                frame_count += 1
+                current_time = time.time()
+                
+                # Print status every 30 frames (about 1 second at 30fps)
+                if frame_count % 30 == 0:
+                    fps = frame_count / (current_time - last_frame_time) if current_time > last_frame_time else 0
+                    print(f"Frame {frame_count}: Running... FPS: {fps:.1f}")
+                
                 success, frame = self.cap.read()
                 if not success:
-                    print("Failed to read frame from camera")
-                    break
+                    print("Failed to read frame from camera - retrying...")
+                    time.sleep(0.1)  # Small delay before retry
+                    continue  # Skip this frame and try again
                 
                 frame = cv2.flip(frame, 1)
                 h, w, _ = frame.shape
@@ -354,123 +390,149 @@ class DualHandTrackingController:
                 shoot_status = "Ready"
                 left_action = None
                 left_status = "No left hand"
-            
-            if results and results.multi_hand_landmarks:
-                try:
-                    # Identify left and right hands
-                    left_hand, right_hand = self.identify_hands(results.multi_hand_landmarks)
-                    
-                    # Process right hand (gun control)
-                    if right_hand:
-                        try:
-                            gun_active = self.right_gun_detector.update(right_hand)
-                            
-                            if gun_active:
-                                # Get index finger for aiming
-                                if len(right_hand.landmark) > 8:
-                                    index_tip = right_hand.landmark[8]
-                                    
-                                    # Move mouse cursor
-                                    if self.control_enabled:
-                                        screen_x, screen_y = self.mouse_controller.update(index_tip.x, index_tip.y)
-                                        self.mouse_controller.move_mouse(screen_x, screen_y)
-                                
-                                # Check thumb position for shooting
-                                thumb_down = is_thumb_down(right_hand)
-                                is_shooting, shoot_status = self.shooting_controller.update(thumb_down, self.control_enabled)
-                                
-                                # Visual indicators for thumb
-                                if len(right_hand.landmark) > 4:
-                                    thumb_tip = right_hand.landmark[4]
-                                    tx = int(thumb_tip.x * w)
-                                    ty = int(thumb_tip.y * h)
-                                    thumb_color = (0, 0, 255) if thumb_down else (0, 255, 255)
-                                    cv2.circle(frame, (tx, ty), 12, thumb_color, -1)
-                                    cv2.putText(frame, "RIGHT THUMB", (tx + 15, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.6, thumb_color, 2)
-                            else:
-                                # Gun not active - release mouse if held
-                                self.shooting_controller.force_release()
-                        except Exception as e:
-                            print(f"Error processing right hand: {e}")
-                    
-                    # Process left hand (gesture controls)
-                    if left_hand:
-                        try:
-                            left_action, left_status = self.left_hand_controller.update(left_hand, self.control_enabled)
-                            
-                            # Visual indicators for left hand
-                            if len(left_hand.landmark) > 0:
-                                wrist = left_hand.landmark[0]
-                                wx = int(wrist.x * w)
-                                wy = int(wrist.y * h)
-                                cv2.circle(frame, (wx, wy), 15, (255, 0, 0), -1)
-                                cv2.putText(frame, "LEFT HAND", (wx + 20, wy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                        except Exception as e:
-                            print(f"Error processing left hand: {e}")
-                            left_action = None
-                            left_status = "Error processing left hand"
-                            
-                except Exception as e:
-                    print(f"Error in hand processing: {e}")
-                    left_hand = None
-                    right_hand = None
-            
-            # Draw hand landmarks
-            try:
-                if results and results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        self.mp_drawing.draw_landmarks(
-                            frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
-                            self.mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
-                            self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2)
-                        )
-            except Exception as e:
-                print(f"Error drawing landmarks: {e}")
-            
-            # Display status
-            try:
-                self.display_dual_hand_status(frame, gun_active, is_shooting, shoot_status, left_action, left_status, w, h)
-            except Exception as e:
-                print(f"Error displaying status: {e}")
-            
-            # Show frame
-            try:
-                cv2.imshow('Dual Hand Tracking: Enhanced CS:GO Controls', frame)
-            except Exception as e:
-                print(f"Error showing frame: {e}")
-                break
-            
-            # Handle keyboard input
-            try:
-                key = cv2.waitKey(5) & 0xFF
-                if key == ord('q'):
-                    self.shooting_controller.force_release()
-                    break
-                elif key == ord('c'):
-                    self.control_enabled = not self.control_enabled
-                    if not self.control_enabled:
-                        self.shooting_controller.force_release()
-                    print(f"\n{'='*50}")
-                    print(f"Control {'ENABLED ✓' if self.control_enabled else 'DISABLED ✗'}")
-                    print(f"{'='*50}\n")
-            except Exception as e:
-                print(f"Error handling keyboard input: {e}")
                 
+                if results and results.multi_hand_landmarks:
+                    try:
+                        # Identify left and right hands
+                        left_hand, right_hand = self.identify_hands(results.multi_hand_landmarks)
+                        
+                        # Process right hand (gun control)
+                        if right_hand:
+                            try:
+                                gun_active = self.right_gun_detector.update(right_hand)
+                                
+                                if gun_active:
+                                    # Get index finger for aiming
+                                    if len(right_hand.landmark) > 8:
+                                        index_tip = right_hand.landmark[8]
+                                        
+                                        # Move mouse cursor
+                                        if self.control_enabled:
+                                            screen_x, screen_y = self.mouse_controller.update(index_tip.x, index_tip.y)
+                                            self.mouse_controller.move_mouse(screen_x, screen_y)
+                                    
+                                    # Check thumb position for shooting
+                                    thumb_down = is_thumb_down(right_hand)
+                                    is_shooting, shoot_status = self.shooting_controller.update(thumb_down, self.control_enabled)
+                                    
+                                    # Visual indicators for thumb
+                                    if len(right_hand.landmark) > 4:
+                                        thumb_tip = right_hand.landmark[4]
+                                        tx = int(thumb_tip.x * w)
+                                        ty = int(thumb_tip.y * h)
+                                        thumb_color = (0, 0, 255) if thumb_down else (0, 255, 255)
+                                        cv2.circle(frame, (tx, ty), 12, thumb_color, -1)
+                                        cv2.putText(frame, "RIGHT THUMB", (tx + 15, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.6, thumb_color, 2)
+                                else:
+                                    # Gun not active - release mouse if held
+                                    self.shooting_controller.force_release()
+                            except Exception as e:
+                                print(f"Error processing right hand: {e}")
+                        
+                        # Process left hand (gesture controls)
+                        if left_hand:
+                            try:
+                                left_action, left_status = self.left_hand_controller.update(left_hand, self.control_enabled)
+                                
+                                # Visual indicators for left hand
+                                if len(left_hand.landmark) > 0:
+                                    wrist = left_hand.landmark[0]
+                                    wx = int(wrist.x * w)
+                                    wy = int(wrist.y * h)
+                                    cv2.circle(frame, (wx, wy), 15, (255, 0, 0), -1)
+                                    cv2.putText(frame, "LEFT HAND", (wx + 20, wy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                            except Exception as e:
+                                print(f"Error processing left hand: {e}")
+                                left_action = None
+                                left_status = "Error processing left hand"
+                                
+                    except Exception as e:
+                        print(f"Error in hand processing: {e}")
+                        left_hand = None
+                        right_hand = None
+                
+                # Draw hand landmarks
+                try:
+                    if results and results.multi_hand_landmarks:
+                        for hand_landmarks in results.multi_hand_landmarks:
+                            self.mp_drawing.draw_landmarks(
+                                frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
+                                self.mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
+                                self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2)
+                            )
+                except Exception as e:
+                    print(f"Error drawing landmarks: {e}")
+                
+                # Display status
+                try:
+                    self.display_dual_hand_status(frame, gun_active, is_shooting, shoot_status, left_action, left_status, w, h)
+                except Exception as e:
+                    print(f"Error displaying status: {e}")
+            
+                # Show frame
+                try:
+                    cv2.imshow('Dual Hand Tracking: Enhanced CS:GO Controls', frame)
+                except Exception as e:
+                    print(f"Error showing frame: {e}")
+                    break
+                
+                # Handle keyboard input
+                try:
+                    key = cv2.waitKey(1) & 0xFF  # Increased wait time from 5 to 1ms
+                    if key == ord('q'):
+                        print("Quit key pressed - exiting...")
+                        self.shooting_controller.force_release()
+                        break
+                    elif key == ord('t'):
+                        self.control_enabled = not self.control_enabled
+                        if not self.control_enabled:
+                            self.shooting_controller.force_release()
+                        print(f"\n{'='*50}")
+                        print(f"Control {'ENABLED ✓' if self.control_enabled else 'DISABLED ✗'}")
+                        print(f"{'='*50}\n")
+                    elif key == 27:  # ESC key
+                        print("ESC key pressed - exiting...")
+                        self.shooting_controller.force_release()
+                        break
+                except Exception as e:
+                    print(f"Error handling keyboard input: {e}")
+                    
             except Exception as e:
                 print(f"Error in main loop: {e}")
                 continue  # Continue to next frame instead of breaking
         
         # Cleanup
-        self.cap.release()
-        cv2.destroyAllWindows()
-        self.hands.close()
-        self.shooting_controller.force_release()
+        print("Cleaning up resources...")
+        try:
+            self.cap.release()
+            print("Camera released")
+        except:
+            pass
+        
+        try:
+            cv2.destroyAllWindows()
+            print("Windows closed")
+        except:
+            pass
+            
+        try:
+            self.hands.close()
+            print("MediaPipe hands closed")
+        except:
+            pass
+            
+        try:
+            self.shooting_controller.force_release()
+            print("Shooting controller released")
+        except:
+            pass
+            
         print("\n🎉 Dual hand tracking complete! Ready for advanced CS:GO!")
     
     def display_dual_hand_status(self, frame, gun_active, is_shooting, shoot_status, left_action, left_status, w, h):
         """Display dual hand status information"""
         # Control status
-        control_status = "CONTROL: ON ✓" if self.control_enabled else "CONTROL: OFF (press 'c')"
+        control_status = "CONTROL: ON ✓" if self.control_enabled else "CONTROL: OFF (press 't')"
         control_color = (0, 255, 0) if self.control_enabled else (0, 0, 255)
         cv2.putText(frame, control_status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, control_color, 2)
         
@@ -503,7 +565,7 @@ class DualHandTrackingController:
         cv2.putText(frame, f"LEFT HAND: {left_status}", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, left_color, 2)
         
         # Instructions
-        cv2.putText(frame, "Press 'c' to toggle | 'q' to quit", (10, h - 20), 
+        cv2.putText(frame, "Press 't' to toggle | 'q' to quit", (10, h - 20), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
 if __name__ == "__main__":
