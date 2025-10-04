@@ -15,10 +15,11 @@ import mediapipe as mp
 import numpy as np
 import pyautogui
 import time
+from pynput.mouse import Controller as MouseController
 
-# Safety
-pyautogui.PAUSE = 0.01
-pyautogui.FAILSAFE = True
+# PyAutoGUI Configuration for continuous key holding
+pyautogui.PAUSE = 0  # Remove pause for continuous operation
+pyautogui.FAILSAFE = False  # Disable failsafe for gesture control
 
 # MediaPipe initialization
 mp_hands = mp.solutions.hands
@@ -277,38 +278,52 @@ class ThumbShootingController:
             self.is_pressed = False
 
 class SmoothMouseController:
-    """Smooth mouse movement controller (from dual_hand_tracking.py)"""
-    def __init__(self, smoothing=0.7, sensitivity=3.0):
-        self.smoothing = smoothing
-        self.sensitivity = sensitivity
+    """True 1:1 mouse controller - mouse moves exactly as much as finger moves"""
+    def __init__(self, sensitivity=1.0):
+        self.sensitivity = sensitivity  # 1:1 ratio
+        self.debug_counter = 0
+        self.mouse = MouseController()
         self.last_x = None
         self.last_y = None
         
     def update(self, hand_landmarks, gun_active):
         if not gun_active or hand_landmarks is None:
+            self.last_x = None
+            self.last_y = None
             return
             
         try:
-            # Get index finger tip position
+            # Get index finger tip position (normalized 0-1)
             index_tip = hand_landmarks.landmark[8]
             
-            # Convert to screen coordinates (assuming 1920x1080 screen)
-            screen_x = int(index_tip.x * 1920)
-            screen_y = int(index_tip.y * 1080)
+            # Convert to screen pixels (1:1 mapping)
+            current_x = index_tip.x * 1920  # Screen width
+            current_y = index_tip.y * 1080  # Screen height
             
-            # Apply smoothing
+            # Calculate exact pixel movement from last frame
             if self.last_x is not None and self.last_y is not None:
-                screen_x = int(self.last_x * self.smoothing + screen_x * (1 - self.smoothing))
-                screen_y = int(self.last_y * self.smoothing + screen_y * (1 - self.smoothing))
+                delta_x = (current_x - self.last_x) * self.sensitivity
+                delta_y = (current_y - self.last_y) * self.sensitivity
+                
+                # Send exact pixel movement (true 1:1)
+                self.mouse.move(int(delta_x), int(delta_y))
             
-            # Move mouse
-            pyautogui.moveTo(screen_x, screen_y)
+            # Debug output every 30 frames
+            self.debug_counter += 1
+            if self.debug_counter % 30 == 0:
+                print(f"1:1 Mouse delta: x={int(delta_x) if 'delta_x' in locals() else 0}, y={int(delta_y) if 'delta_y' in locals() else 0}")
             
-            self.last_x = screen_x
-            self.last_y = screen_y
+            self.last_x = current_x
+            self.last_y = current_y
             
         except Exception as e:
             print(f"Mouse control error: {e}")
+            # Fallback to pyautogui
+            try:
+                if 'delta_x' in locals() and 'delta_y' in locals():
+                    pyautogui.moveRel(int(delta_x), int(delta_y))
+            except Exception as e2:
+                print(f"Fallback mouse control error: {e2}")
 
 class LeftHandGestureController:
     """Left hand gesture controller for crouch/jump (from dual_hand_tracking.py)"""
@@ -421,6 +436,10 @@ class WASDController:
         for key in keys_to_press:
             pyautogui.keyDown(key)
             print(f"Pressed: {key.upper()}")
+            
+        # Continuously hold down keys that should remain pressed
+        for key in desired_keys:
+            pyautogui.keyDown(key)  # Keep pressing the key to ensure it stays down
         
         self.current_keys = desired_keys
         
@@ -660,7 +679,7 @@ class LeaningControlSystem:
                 )
                 
                 # Debug output for hybrid detection
-                print(f"DEBUG: Left/Right Lean={left_right_lean:.1f}, Head Pitch={head_pitch:.1f}")
+                # print(f"DEBUG: Left/Right Lean={left_right_lean:.1f}, Head Pitch={head_pitch:.1f}")
                 
                 # Process hands
                 if hand_results and hand_results.multi_hand_landmarks:
@@ -765,77 +784,81 @@ class LeaningControlSystem:
     
     def display_status(self, frame, wasd_states, gun_active, shoot_status, 
                       left_status, tongue_status, left_right_lean, head_pitch, tongue_out):
-        """Display status overlay on frame"""
+        """Display clean, organized status overlay"""
         h, w = frame.shape[:2]
         
-        # Control status
-        control_status = "CONTROL: ON ✓" if self.control_enabled else "CONTROL: OFF (press 'g')"
-        cv2.putText(frame, control_status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, 
-                   (0, 255, 0) if self.control_enabled else (0, 0, 255), 2)
+        # Create semi-transparent background panels
+        self._draw_panel(frame, 10, 10, 300, 120, "CONTROL STATUS", alpha=0.8)
+        self._draw_panel(frame, w - 200, 10, 180, 100, "MOVEMENT", alpha=0.8)
+        self._draw_panel(frame, 10, h - 150, 350, 130, "GESTURE STATUS", alpha=0.8)
         
-        # Hybrid control status
-        cv2.putText(frame, f"Left/Right Lean: {left_right_lean:.1f}°", (10, 70), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        cv2.putText(frame, f"Head Pitch: {head_pitch:.1f}°", (10, 100), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        # Main control status (top left)
+        control_status = "CONTROL: ON ✓" if self.control_enabled else "CONTROL: OFF ✗"
+        control_color = (0, 255, 0) if self.control_enabled else (0, 0, 255)
+        cv2.putText(frame, control_status, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, control_color, 2)
         
-        # WASD status (top left)
-        wasd_text = "WASD: "
-        for key, active in wasd_states.items():
-            if active:
-                wasd_text += f"{key.upper()} "
-                
-        if not any(wasd_states.values()):
-            wasd_text += "None"
-            
-        cv2.putText(frame, wasd_text, (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        # Toggle instruction
+        cv2.putText(frame, "Press 'G' to toggle", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+        cv2.putText(frame, "Press 'Q' to quit", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
-        # WASD overlay in top right corner
-        overlay_x = w - 150
-        overlay_y = 30
-        overlay_width = 120
-        overlay_height = 80
+        # Movement overlay (top right) - Clean WASD display
+        self._draw_wasd_overlay(frame, w - 190, 30, wasd_states)
         
-        # Draw background rectangle
-        cv2.rectangle(frame, (overlay_x, overlay_y), (overlay_x + overlay_width, overlay_y + overlay_height), (0, 0, 0), -1)
-        cv2.rectangle(frame, (overlay_x, overlay_y), (overlay_x + overlay_width, overlay_y + overlay_height), (255, 255, 255), 2)
+        # Gesture status panel (bottom left) - Organized layout
+        y_start = h - 130
         
-        # Draw key indicators
-        key_positions = {
-            'w': (overlay_x + 50, overlay_y + 25),
-            'a': (overlay_x + 15, overlay_y + 50),
-            's': (overlay_x + 50, overlay_y + 50),
-            'd': (overlay_x + 85, overlay_y + 50)
-        }
+        # Right hand (gun)
+        gun_color = (0, 255, 0) if gun_active else (128, 128, 128)
+        cv2.putText(frame, f"🔫 Gun: {'ACTIVE' if gun_active else 'INACTIVE'}", (20, y_start + 20), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, gun_color, 2)
+        if gun_active:
+            cv2.putText(frame, f"   Shoot: {shoot_status}", (20, y_start + 45), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        for key, (x, y) in key_positions.items():
-            color = (0, 255, 0) if wasd_states[key] else (128, 128, 128)
-            cv2.circle(frame, (x, y), 15, color, -1)
-            cv2.circle(frame, (x, y), 15, (255, 255, 255), 2)
-            cv2.putText(frame, key.upper(), (x - 8, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        # Left hand
+        cv2.putText(frame, f"✋ Left: {left_status}", (20, y_start + 70), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Tongue
+        tongue_color = (0, 255, 0) if tongue_out else (128, 128, 128)
+        cv2.putText(frame, f"👅 Tongue: {tongue_status}", (20, y_start + 95), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, tongue_color, 2)
+    
+    def _draw_panel(self, frame, x, y, width, height, title, alpha=0.7):
+        """Draw a semi-transparent panel with title"""
+        # Create overlay
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x, y), (x + width, y + height), (0, 0, 0), -1)
+        cv2.rectangle(overlay, (x, y), (x + width, y + height), (255, 255, 255), 2)
+        
+        # Blend overlay
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
         
         # Add title
-        cv2.putText(frame, "WASD", (overlay_x + 35, overlay_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(frame, title, (x + 5, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    
+    def _draw_wasd_overlay(self, frame, x, y, wasd_states):
+        """Draw clean WASD movement indicator"""
+        # Draw key indicators in a clean layout
+        key_positions = {
+            'w': (x + 80, y + 25),
+            'a': (x + 40, y + 50),
+            's': (x + 80, y + 50),
+            'd': (x + 120, y + 50)
+        }
         
-        # Right hand status
-        gun_color = (0, 255, 0) if gun_active else (0, 0, 255)
-        cv2.putText(frame, f"Gun: {'ACTIVE ✓' if gun_active else 'INACTIVE ✗'}", (10, 160), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, gun_color, 1)
-        cv2.putText(frame, f"Shoot: {shoot_status}", (10, 190), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        # Draw active keys
+        active_keys = [key for key, active in wasd_states.items() if active]
+        if active_keys:
+            cv2.putText(frame, f"Moving: {' '.join([k.upper() for k in active_keys])}", 
+                       (x + 10, y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         
-        # Left hand status
-        cv2.putText(frame, f"Left: {left_status}", (10, 220), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        
-        # Tongue status
-        tongue_color = (0, 255, 0) if tongue_out else (255, 255, 255)
-        cv2.putText(frame, f"Tongue: {tongue_status}", (10, 250), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, tongue_color, 1)
-        
-        # Instructions
-        cv2.putText(frame, "Press 'g' to toggle | 'q' to quit", (10, h - 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        # Draw key circles
+        for key, (kx, ky) in key_positions.items():
+            color = (0, 255, 0) if wasd_states[key] else (60, 60, 60)
+            cv2.circle(frame, (kx, ky), 12, color, -1)
+            cv2.circle(frame, (kx, ky), 12, (255, 255, 255), 1)
+            cv2.putText(frame, key.upper(), (kx - 6, ky + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
 if __name__ == "__main__":
     system = LeaningControlSystem()

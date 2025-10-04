@@ -5,6 +5,10 @@ Contains API keys and settings for AI integration
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (look in parent directory)
+load_dotenv('../.env')
 
 class Config:
     """Configuration class for API keys and settings"""
@@ -15,7 +19,7 @@ class Config:
         self.elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY', '')
         
         # Gemini API Settings
-        self.gemini_model = 'gemini-1.5-flash'
+        self.gemini_model = 'gemini-2.0-flash'
         self.gemini_temperature = 0.7
         self.gemini_max_tokens = 1000
         
