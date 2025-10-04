@@ -38,10 +38,12 @@ def is_finger_extended(landmarks, finger_tip_id, finger_pip_id, finger_mcp_id):
     pip = [landmarks[finger_pip_id].x, landmarks[finger_pip_id].y]
     mcp = [landmarks[finger_mcp_id].x, landmarks[finger_mcp_id].y]
     angle = calculate_angle(tip, pip, mcp)
-    return angle > 130
+    return angle > 140  # Increased threshold to be more strict
 
 def is_gun_gesture(hand_landmarks):
     """Detect gun gesture (index out, bottom 3 curled)"""
+    if hand_landmarks is None:
+        return False
     landmarks = hand_landmarks.landmark
     index_extended = is_finger_extended(landmarks, 8, 6, 5)
     middle_curled = not is_finger_extended(landmarks, 12, 10, 9)
@@ -60,41 +62,32 @@ def is_thumb_down(hand_landmarks):
     # Thumb pointing down if tip is below IP joint
     return thumb_tip.y > thumb_ip.y
 
-def are_bottom_fingers_curled(landmarks):
-    """Check if bottom 3 fingers (middle, ring, pinky) are curled"""
-    try:
-        # Calculate distances
-        middle_tip = landmarks[12]
-        middle_pip = landmarks[10]
-        middle_mcp = landmarks[9]
-        
-        ring_tip = landmarks[16]
-        ring_pip = landmarks[14]
-        ring_mcp = landmarks[13]
-        
-        pinky_tip = landmarks[20]
-        pinky_pip = landmarks[18]
-        pinky_mcp = landmarks[17]
-        
-        # Calculate distances
-        middle_dist = np.sqrt((middle_tip.x - middle_pip.x)**2 + (middle_tip.y - middle_pip.y)**2)
-        middle_mcp_dist = np.sqrt((middle_pip.x - middle_mcp.x)**2 + (middle_pip.y - middle_mcp.y)**2)
-        
-        ring_dist = np.sqrt((ring_tip.x - ring_pip.x)**2 + (ring_tip.y - ring_pip.y)**2)
-        ring_mcp_dist = np.sqrt((ring_pip.x - ring_mcp.x)**2 + (ring_pip.y - ring_mcp.y)**2)
-        
-        pinky_dist = np.sqrt((pinky_tip.x - pinky_pip.x)**2 + (pinky_tip.y - pinky_pip.y)**2)
-        pinky_mcp_dist = np.sqrt((pinky_pip.x - pinky_mcp.x)**2 + (pinky_pip.y - pinky_mcp.y)**2)
-        
-        # Check if fingers are curled (distance ratio)
-        middle_curled = middle_dist < middle_mcp_dist * 1.8
-        ring_curled = ring_dist < ring_mcp_dist * 1.8
-        pinky_curled = pinky_dist < pinky_mcp_dist * 1.8
-        
-        curled_count = sum([middle_curled, ring_curled, pinky_curled])
-        return curled_count >= 2
-    except:
-        return False
+def are_bottom_fingers_curled(hand_landmarks):
+    """Check if bottom 3 fingers are curled (rotation-proof) - from finger_tracking.py"""
+    landmarks = hand_landmarks.landmark
+    wrist = landmarks[0]
+    
+    middle_tip = landmarks[12]
+    middle_mcp = landmarks[9]
+    middle_dist = ((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2)**0.5
+    middle_mcp_dist = ((middle_mcp.x - wrist.x)**2 + (middle_mcp.y - wrist.y)**2)**0.5
+    middle_curled = middle_dist < middle_mcp_dist * 1.8
+    
+    ring_tip = landmarks[16]
+    ring_mcp = landmarks[13]
+    ring_dist = ((ring_tip.x - wrist.x)**2 + (ring_tip.y - wrist.y)**2)**0.5
+    ring_mcp_dist = ((ring_mcp.x - wrist.x)**2 + (ring_mcp.y - wrist.y)**2)**0.5
+    ring_curled = ring_dist < ring_mcp_dist * 1.8
+    
+    pinky_tip = landmarks[20]
+    pinky_mcp = landmarks[17]
+    pinky_dist = ((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2)**0.5
+    pinky_mcp_dist = ((pinky_mcp.x - wrist.x)**2 + (pinky_mcp.y - wrist.y)**2)**0.5
+    pinky_curled = pinky_dist < pinky_mcp_dist * 1.8
+    
+    curled_count = sum([middle_curled, ring_curled, pinky_curled])
+    return curled_count >= 2
+
 
 def detect_left_hand_gestures(hand_landmarks):
     """Detect left hand gestures for crouch/jump"""
@@ -208,33 +201,41 @@ class StickyGunDetector:
         
     def update(self, hand_landmarks):
         if hand_landmarks is None:
-            self.frames_without_hand += 1
-            if self.frames_without_hand > self.grace_period:
-                self.is_locked = False
-                self.lock_frames = 0
-            return False
+            if self.is_locked:
+                self.frames_without_hand += 1
+                if self.frames_without_hand > self.grace_period:
+                    self.is_locked = False
+                    self.lock_frames = 0
+                    self.frames_without_hand = 0
+                    print("🔫 Gun UNLOCKED! (no hand)")
+                    return False
+                else:
+                    return True
+            else:
+                self.frames_without_hand = 0
+                return False
         
         self.frames_without_hand = 0
+        gun_detected = is_gun_gesture(hand_landmarks)
+        bottom_fingers_curled = are_bottom_fingers_curled(hand_landmarks)
         
-        # Check if we should lock the gun
-        if is_gun_gesture(hand_landmarks):
-            if not self.is_locked:
+        if not self.is_locked:
+            if gun_detected:
                 self.is_locked = True
                 self.lock_frames = 0
                 print("🔫 Gun LOCKED!")
-            return True
-        
-        # If locked, check if we should maintain the lock
-        if self.is_locked:
-            if are_bottom_fingers_curled(hand_landmarks.landmark):
-                self.lock_frames += 1
                 return True
             else:
+                return False
+        else:
+            self.lock_frames += 1
+            if not bottom_fingers_curled:
                 self.is_locked = False
                 self.lock_frames = 0
                 print("🔫 Gun UNLOCKED!")
-        
-        return False
+                return False
+            else:
+                return True
 
 class ThumbShootingController:
     """Mouse click controller based on thumb position (from dual_hand_tracking.py)"""
@@ -346,7 +347,7 @@ class LeftHandGestureController:
 
 class WASDController:
     """Hybrid controller: Head pose for W/S, body lean for A/D"""
-    def __init__(self, lean_threshold=3, pitch_threshold=8, pitch_threshold_back=12, hysteresis=0.7):
+    def __init__(self, lean_threshold=5, pitch_threshold=8, pitch_threshold_back=12, hysteresis=0.7):
         self.lean_threshold = lean_threshold  # For A/D (left/right lean)
         self.pitch_threshold = pitch_threshold  # For W (head forward)
         self.pitch_threshold_back = pitch_threshold_back  # For S (head backward)
@@ -678,19 +679,27 @@ class LeaningControlSystem:
                         # Process right hand (gun control)
                         if right_hand:
                             try:
-                                gun_active = self.gun_detector.update(right_hand)
-                                
-                                if gun_active:
-                                    # Thumb shooting
-                                    is_shooting, shoot_status = self.shooting_controller.update(
-                                        right_hand, gun_active
-                                    )
+                                # Only detect gun gesture if controls are enabled
+                                if self.control_enabled:
+                                    gun_active = self.gun_detector.update(right_hand)
                                     
-                                    # Mouse movement
-                                    self.mouse_controller.update(right_hand, gun_active)
+                                    if gun_active:
+                                        # Thumb shooting
+                                        is_shooting, shoot_status = self.shooting_controller.update(
+                                            right_hand, gun_active
+                                        )
+                                        
+                                        # Mouse movement
+                                        self.mouse_controller.update(right_hand, gun_active)
+                                    else:
+                                        # Gun not active - release mouse if held
+                                        self.shooting_controller.force_release()
                                 else:
-                                    # Gun not active - release mouse if held
+                                    # Controls disabled - force release everything and reset gun detector
                                     self.shooting_controller.force_release()
+                                    self.gun_detector.is_locked = False  # Reset gun detector
+                                    self.gun_detector.lock_frames = 0
+                                    gun_active = False
                                     
                             except Exception as e:
                                 print(f"Error processing right hand: {e}")
