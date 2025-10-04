@@ -289,7 +289,7 @@ export default function Docs() {
                     Ensure all required packages are installed: MediaPipe, OpenCV, PyAutoGUI, and NumPy. Run the included installation script.
                   </p>
                   <p className="body-text text-sm text-gray-500">
-                    Check that you're using Python 3.8 or later.
+                    Check that you&apos;re using Python 3.8 or later.
                   </p>
                 </div>
               </div>

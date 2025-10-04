@@ -111,7 +111,7 @@ export default function DownloadPage() {
       {/* Next Steps */}
       <section className="py-24 px-6 lg:px-8 bg-black">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="h2-text text-white mb-6">What's Next?</h2>
+          <h2 className="h2-text text-white mb-6">What&apos;s Next?</h2>
           <p className="body-text text-gray-300 mb-8">
             While you wait for the official release, explore our comprehensive documentation to learn about gesture controls, calibration, and troubleshooting.
           </p>

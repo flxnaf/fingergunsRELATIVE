@@ -34,7 +34,7 @@ export default function About() {
             <div className="bg-black border border-gray-800 p-8">
               <blockquote className="border-l-4 border-white pl-6">
                 <p className="body-text text-gray-300 italic mb-4">
-                  "We set out to prove that the future of gaming interfaces doesn't require expensive hardware—just intelligent software and a standard webcam."
+                  &ldquo;We set out to prove that the future of gaming interfaces doesn&apos;t require expensive hardware—just intelligent software and a standard webcam.&rdquo;
                 </p>
                 <cite className="body-text text-gray-500 not-italic">— FingerGuns Development Team</cite>
               </blockquote>
@@ -60,7 +60,7 @@ export default function About() {
             <div className="bg-gray-950 border border-gray-800 p-8">
               <h3 className="h4-text text-white mb-4">Computer Vision</h3>
               <p className="body-text text-gray-400 mb-4">
-                Powered by MediaPipe's industry-leading hand and face tracking solutions, providing accurate landmark detection with minimal latency.
+                Powered by MediaPipe&apos;s industry-leading hand and face tracking solutions, providing accurate landmark detection with minimal latency.
               </p>
               <ul className="space-y-2">
                 <li className="body-text text-sm text-gray-400 flex items-start">
@@ -137,7 +137,7 @@ export default function About() {
           </div>
           <h2 className="h2-text text-white mb-6">Built by Engineers</h2>
           <p className="body-text text-gray-300 max-w-3xl mx-auto mb-8">
-            FingerGuns was developed by a team of computer vision engineers and gaming enthusiasts who wanted to push the boundaries of what's possible with modern machine learning frameworks.
+            FingerGuns was developed by a team of computer vision engineers and gaming enthusiasts who wanted to push the boundaries of what&apos;s possible with modern machine learning frameworks.
           </p>
           <p className="body-text text-gray-400 max-w-3xl mx-auto">
             What started as a hackathon experiment has evolved into a fully-featured control system that demonstrates the potential of gesture-based interfaces in gaming.
