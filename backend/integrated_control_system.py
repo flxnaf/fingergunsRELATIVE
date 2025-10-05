@@ -245,35 +245,49 @@ class ThumbShootingController:
             self.is_pressed = False
 
 class SmoothMouseController:
-    """Smooth mouse movement controller (from dual_hand_tracking.py)"""
-    def __init__(self, smoothing=0.7, sensitivity=3.0):
-        self.smoothing = smoothing
+    """Relative mouse movement controller for FPS games - TRUE relative positioning, no snapping"""
+    def __init__(self, sensitivity=1.0):
         self.sensitivity = sensitivity
         self.last_x = None
         self.last_y = None
+        self.debug_counter = 0
+        self.gun_was_active = False  # Track gun state to prevent snapping
         
     def update(self, hand_landmarks, gun_active):
         if not gun_active or hand_landmarks is None:
+            # DON'T reset position - keep last known position to prevent snapping
+            self.gun_was_active = False
             return
             
         try:
-            # Get index finger tip position
+            # Get index finger tip position (normalized 0-1)
             index_tip = hand_landmarks.landmark[8]
             
-            # Convert to screen coordinates (assuming 1920x1080 screen)
-            screen_x = int(index_tip.x * 1920)
-            screen_y = int(index_tip.y * 1080)
+            # Convert to screen pixels for tracking (using standard 1920x1080)
+            current_x = index_tip.x * 1920
+            current_y = index_tip.y * 1080
             
-            # Apply smoothing
-            if self.last_x is not None and self.last_y is not None:
-                screen_x = int(self.last_x * self.smoothing + screen_x * (1 - self.smoothing))
-                screen_y = int(self.last_y * self.smoothing + screen_y * (1 - self.smoothing))
+            # Check if this is first frame after gun activation
+            if not self.gun_was_active:
+                # First frame - establish baseline WITHOUT moving cursor
+                print("🔄 Position tracking reestablished (no snap)")
+            elif self.last_x is not None and self.last_y is not None:
+                # Subsequent frames - calculate and apply delta movement
+                delta_x = (current_x - self.last_x) * self.sensitivity
+                delta_y = (current_y - self.last_y) * self.sensitivity
+                
+                # Use relative mouse movement (perfect for FPS games)
+                pyautogui.moveRel(int(delta_x), int(delta_y))
+                
+                # Debug output every 30 frames
+                self.debug_counter += 1
+                if self.debug_counter % 30 == 0:
+                    print(f"Relative mouse delta: x={int(delta_x)}, y={int(delta_y)}")
             
-            # Move mouse
-            pyautogui.moveTo(screen_x, screen_y)
-            
-            self.last_x = screen_x
-            self.last_y = screen_y
+            # Always update last position for next frame
+            self.last_x = current_x
+            self.last_y = current_y
+            self.gun_was_active = True
             
         except Exception as e:
             print(f"Mouse control error: {e}")

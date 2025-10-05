@@ -193,27 +193,53 @@ class ThumbShootingController:
             self.is_shooting = False
 
 class SmoothMouseController:
-    def __init__(self, smoothing_factor=0.5):
-        self.smoothing_factor = smoothing_factor
-        self.prev_x = None
-        self.prev_y = None
+    """Relative mouse movement controller for FPS games - TRUE relative positioning, no snapping"""
+    def __init__(self, sensitivity=1.0):
+        self.sensitivity = sensitivity
+        self.last_x = None
+        self.last_y = None
         self.screen_width, self.screen_height = pyautogui.size()
+        self.debug_counter = 0
+        self.tracking_active = False  # Track if we're actively tracking
         
     def update(self, finger_x, finger_y):
-        screen_x = int(finger_x * self.screen_width)
-        screen_y = int(finger_y * self.screen_height)
+        """Calculate and return delta movement"""
+        # Convert normalized coordinates to pixels
+        current_x = finger_x * self.screen_width
+        current_y = finger_y * self.screen_height
         
-        if self.prev_x is not None:
-            screen_x = int(self.smoothing_factor * self.prev_x + (1 - self.smoothing_factor) * screen_x)
-            screen_y = int(self.smoothing_factor * self.prev_y + (1 - self.smoothing_factor) * screen_y)
+        delta_x = 0
+        delta_y = 0
         
-        self.prev_x = screen_x
-        self.prev_y = screen_y
+        # Check if this is first frame after activation
+        if not self.tracking_active:
+            # First frame - establish baseline without moving
+            print("🔄 Position tracking reestablished (no snap)")
+        elif self.last_x is not None and self.last_y is not None:
+            # Subsequent frames - calculate delta movement
+            delta_x = (current_x - self.last_x) * self.sensitivity
+            delta_y = (current_y - self.last_y) * self.sensitivity
         
-        return screen_x, screen_y
+        # Store current position
+        self.last_x = current_x
+        self.last_y = current_y
+        self.tracking_active = True
+        
+        return int(delta_x), int(delta_y)
     
-    def move_mouse(self, screen_x, screen_y):
-        pyautogui.moveTo(screen_x, screen_y)
+    def move_mouse(self, delta_x, delta_y):
+        """Move mouse relatively"""
+        if delta_x != 0 or delta_y != 0:
+            pyautogui.moveRel(delta_x, delta_y)
+            
+            # Debug output
+            self.debug_counter += 1
+            if self.debug_counter % 30 == 0:
+                print(f"Relative mouse delta: x={delta_x}, y={delta_y}")
+    
+    def reset(self):
+        """Reset tracking state but keep position (prevents snapping on reactivation)"""
+        self.tracking_active = False
 
 class LeftHandGestureController:
     def __init__(self):
@@ -406,10 +432,13 @@ class DualHandTrackingController:
                                     if len(right_hand.landmark) > 8:
                                         index_tip = right_hand.landmark[8]
                                         
-                                        # Move mouse cursor
+                                        # Move mouse cursor with relative positioning
                                         if self.control_enabled:
-                                            screen_x, screen_y = self.mouse_controller.update(index_tip.x, index_tip.y)
-                                            self.mouse_controller.move_mouse(screen_x, screen_y)
+                                            delta_x, delta_y = self.mouse_controller.update(index_tip.x, index_tip.y)
+                                            self.mouse_controller.move_mouse(delta_x, delta_y)
+                                        else:
+                                            # Reset tracking when control is disabled
+                                            self.mouse_controller.reset()
                                     
                                     # Check thumb position for shooting
                                     thumb_down = is_thumb_down(right_hand)
@@ -424,8 +453,9 @@ class DualHandTrackingController:
                                         cv2.circle(frame, (tx, ty), 12, thumb_color, -1)
                                         cv2.putText(frame, "RIGHT THUMB", (tx + 15, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.6, thumb_color, 2)
                                 else:
-                                    # Gun not active - release mouse if held
+                                    # Gun not active - release mouse if held and reset tracking
                                     self.shooting_controller.force_release()
+                                    self.mouse_controller.reset()
                             except Exception as e:
                                 print(f"Error processing right hand: {e}")
                         
